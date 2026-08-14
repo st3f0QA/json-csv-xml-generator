@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Schema Vault</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="#" aria-label="Schema Vault home">
+          <span class="brand-mark">{ }</span>
+          <span>Schema Vault</span>
+        </a>
+        <nav class="tabs" aria-label="Main navigation"><button class="tab active" type="button" data-view="schemas">Schemas</button><button class="tab" type="button" data-view="mappings">Mapping Rules</button><button class="tab" type="button" data-view="generate">Generate</button></nav>
+      </header>
+      <div class="server-notice" id="server-notice" hidden></div>
+
+      <section class="page" id="schemas-page">
+      <section class="hero">
+        <p class="eyebrow">JSON PATTERN LIBRARY</p>
+        <h1>Keep your JSON<br /><em>patterns</em> close.</h1>
+        <p class="intro">Upload a representative JSON file, give the pattern a useful name, and return to it whenever you need to generate a new file.</p>
+      </section>
+
+      <section class="workspace" aria-label="Schema workspace">
+        <form class="save-card" id="schema-form">
+          <div class="card-heading">
+            <span class="step">01</span>
+            <div><h2>Save a new pattern</h2><p>Start with a real example file.</p></div>
+          </div>
+
+          <label class="dropzone" id="dropzone" for="json-file">
+            <input id="json-file" type="file" accept="application/json,.json" hidden />
+            <span class="upload-icon">↑</span>
+            <strong id="upload-title">Drop your JSON here</strong>
+            <span id="upload-subtitle">or choose a file from your computer</span>
+          </label>
+
+          <label class="field-label" for="schema-name">PATTERN NAME</label>
+          <div class="name-row">
+            <input id="schema-name" name="schema-name" placeholder="e.g. down" autocomplete="off" maxlength="50" required />
+            <button type="submit" class="save-button">Save pattern <span>→</span></button>
+          </div>
+          <p class="form-message" id="form-message" role="status"></p>
+        </form>
+
+        <aside class="tip-card">
+          <span class="tip-number">// 01</span>
+          <h2>A pattern is your starting point.</h2>
+          <p>We preserve the original JSON as a real file in this project’s <strong>Schema Vault</strong> folder. Nothing is uploaded. In the next version, you’ll be able to select which values should change during generation.</p>
+          <div class="tip-example"><span>{</span><br />&nbsp;&nbsp;"direction": "down",<br />&nbsp;&nbsp;"amount": 10<br /><span>}</span></div>
+        </aside>
+      </section>
+
+      <section class="library-section">
+        <div class="library-heading">
+          <div><p class="eyebrow">YOUR LIBRARY</p><h2>Saved patterns <span id="schema-count">(0)</span></h2></div>
+          <button class="clear-button" id="clear-button" type="button" hidden>Clear library</button>
+        </div>
+        <div class="empty-state" id="empty-state">
+          <span class="empty-braces">{ }</span>
+          <p>Your saved JSON patterns will appear here.</p>
+        </div>
+        <div class="schema-grid" id="schema-grid" aria-live="polite"></div>
+      </section>
+      </section>
+
+      <section class="page" id="mappings-page" hidden>
+        <section class="mapping-hero"><p class="eyebrow">RULE BUILDER</p><h1>Connect your<br /><em>patterns.</em></h1><p>Choose two imported schemas, then define which source fields populate each target field.</p></section>
+        <section class="mapping-card">
+          <div class="mapping-header"><span class="step">02</span><div><h2>Create a mapping rule</h2><p>Rules are saved locally in this project for future generation.</p></div></div>
+          <div class="mapping-settings"><label><span>RULE NAME</span><input id="rule-name" placeholder="e.g. AP to Down rule" maxlength="50" /></label><label><span>SOURCE SCHEMA</span><select id="source-schema"><option value="">Choose a source…</option></select></label><span class="mapping-arrow">→</span><label><span>TARGET SCHEMA</span><select id="target-schema"><option value="">Choose a target…</option></select></label></div>
+          <div class="mapping-empty" id="mapping-empty">Choose a source and target schema to start mapping their fields.</div>
+          <div class="mapping-table" id="mapping-table" hidden><div class="mapping-labels"><span>FROM SOURCE</span><span>TO TARGET</span><span></span></div><div id="mapping-rows"></div><button type="button" class="add-row" id="add-mapping">+ Add another field mapping</button><button type="button" class="save-button save-rule" id="save-rule">Save mapping rule <span>→</span></button></div>
+          <p class="form-message" id="rule-message" role="status"></p>
+        </section>
+        <section class="library-section rules-library"><div class="library-heading"><div><p class="eyebrow">SAVED RULES</p><h2>Mapping rules <span id="rule-count">(0)</span></h2></div></div><div class="empty-state" id="rules-empty"><span class="empty-braces">↔</span><p>Your saved field-mapping rules will appear here.</p></div><div class="rules-grid" id="rules-grid"></div></section>
+      </section>
+
+      <section class="page" id="generate-page" hidden>
+        <section class="mapping-hero"><p class="eyebrow">FILE GENERATOR</p><h1>Generate a<br /><em>matching</em> entity.</h1><p>Choose the entity you need, apply any relevant mapping rules, then provide the values needed for its connected fields.</p></section>
+        <section class="mapping-card generator-card">
+          <div class="mapping-header"><span class="step">03</span><div><h2>Generate JSON</h2><p>Your original schema remains unchanged.</p></div></div>
+          <label class="generator-select"><span>ENTITY TO GENERATE</span><select id="generate-schema"><option value="">Choose an imported schema…</option></select></label>
+          <section id="generate-rules-section" hidden><p class="eyebrow generator-label">APPLY MAPPING RULES</p><div class="generate-rules" id="generate-rules"></div></section>
+          <section id="generator-questions-section" hidden><p class="eyebrow generator-label">VALUES FOR THIS FILE</p><p class="question-help">Only fields used in the selected mapping rules are shown. Leave a value blank to keep the example value from the schema.</p><div class="generator-questions" id="generator-questions"></div><button type="button" class="save-button save-rule" id="generate-file">Generate and save file <span>→</span></button></section>
+          <div class="mapping-empty" id="generator-empty">Choose an entity to see its available mapping rules.</div>
+          <p class="form-message" id="generator-message" role="status"></p>
+        </section>
+      </section>
+    </main>
+    <template id="schema-template">
+      <article class="schema-card">
+        <div class="schema-card-top"><span class="file-type">JSON</span><button class="delete-button" type="button" aria-label="Delete pattern">×</button></div>
+        <h3></h3>
+        <p class="schema-meta"></p>
+        <pre></pre>
+        <button class="view-button" type="button">View source <span>↗</span></button>
+      </article>
+    </template>
+    <template id="mapping-row-template"><div class="mapping-row"><select class="source-field"></select><span class="row-arrow">→</span><select class="target-field"></select><button type="button" class="remove-row" aria-label="Remove field mapping">×</button></div></template>
+    <template id="rule-template"><article class="rule-card"><div class="schema-card-top"><span class="file-type">MAPPING</span><button class="delete-rule" type="button" aria-label="Delete mapping rule">×</button></div><h3></h3><p class="rule-meta"></p><div class="rule-connection"></div></article></template>
+    <template id="generator-rule-template"><label class="generator-rule"><input type="checkbox" /><span class="generator-rule-name"></span><small></small></label></template>
+    <dialog id="source-dialog">
+      <div class="dialog-header"><div><p class="eyebrow">SAVED JSON</p><h2 id="dialog-title"></h2></div><button id="close-dialog" aria-label="Close">×</button></div>
+      <pre id="dialog-source"></pre>
+    </dialog>
+    <script src="app.js"></script>
+  </body>
+</html>

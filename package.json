@@ -1,0 +1,9 @@
+{
+  "name": "schema-vault",
+  "private": true,
+  "version": "0.1.0",
+  "description": "A local-only JSON schema pattern library",
+  "scripts": {
+    "start": "node server.mjs"
+  }
+}

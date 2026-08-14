@@ -1,0 +1,28 @@
+{
+  "name": "AP to Down",
+  "sourceSchema": "AP_submitted_CM",
+  "targetSchema": "FMKB_down",
+  "mappings": [
+    {
+      "source": "[].platform",
+      "target": "[].machineInWeek.machine.productline.code"
+    },
+    {
+      "source": "[].startDate",
+      "target": "[].startTime"
+    },
+    {
+      "source": "[].submitDate",
+      "target": "[].endTime"
+    },
+    {
+      "source": "[].fault.dateTime",
+      "target": "[].selectedTaskT.eventByEventFkStart.eventDt"
+    },
+    {
+      "source": "[].fault.faultType",
+      "target": "[].selectedTaskT.eventByEventFkStart.eventSubcode.eventCode.productline.name"
+    }
+  ],
+  "savedAt": 1785697488092
+}
