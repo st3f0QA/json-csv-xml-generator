@@ -1,0 +1,14 @@
+{
+  "name": "tests",
+  "sourceSchema": "AP_submitted_CM",
+  "targetSchema": "FMKB_down",
+  "mappings": [
+    {
+      "source": "[].fault.description",
+      "sourceLabel": "sssssssss",
+      "target": "[].machineInWeek.machine.productline.pk",
+      "targetLabel": "eeeee"
+    }
+  ],
+  "savedAt": 1787143018257
+}

@@ -1,0 +1,46 @@
+[
+  {
+    "filename": "SDT_MHF39t20220411_001022_FieldExperience_SRC.xml",
+    "version": 2,
+    "globalId": "ooo35f4fa8493f6465e8a9ce45f6ec166e0",
+    "title": "TEST SAME AP - 3 - first",
+    "platform": "NXE",
+    "functionalCluster": "FC-023",
+    "subsystem": "ElectricalLayout",
+    "uuidPredecessor": "",
+    "uuidSuccessor": "zzzz3bb8ff4c4e8daf778f3175ce8ae9",
+    "status": "SUBMITTED",
+    "userName": "djang3",
+    "startDate": "2025-03-20 14:18:00",
+    "submitDate": "2025-03-21 05:07:00",
+    "soNumber": "",
+    "fault": {
+      "dateTime": "2025-03-20 12:00:00",
+      "description": "Scanner Control",
+      "faultType": "STARTUP",
+      "machine": "62491"
+    },
+    "solvedIssue": "YES",
+    "solutionKnown": "",
+    "type": "DDF",
+    "initiatedFrom": "SDT",
+    "epsUsed": "ASML VELDHOVEN",
+    "comments": "YES",
+    "ddfFm1GlobalId": "bc6c6dfb4e7a4e12af34582140eb4260",
+    "tags": {
+      "isNpi": "true"
+    },
+    "actionPlanLink": "https://epscentral.asml.com:8443/ddf/#/viewActionPlan/-1/fffbf95c29284d6fa20c122d8a500dab/convenience-page-token",
+    "ddfSolutions": [
+      {
+        "fm2Title": "Unknown Failure",
+        "solution": "Escalate"
+      }
+    ],
+    "customSolutions": [],
+    "singleSolution": {
+      "solution": "DDF: Escalate",
+      "fm2Title": "Unknown Failure"
+    }
+  }
+]

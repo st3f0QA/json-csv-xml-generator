@@ -1,0 +1,12 @@
+{
+  "name": "New mandatory rule",
+  "sourceSchema": "FMKB_down",
+  "targetSchema": "AP_submitted_CM",
+  "mappings": [
+    {
+      "source": "[].machineInWeek.machine.equipmentNr",
+      "target": "[].submitDate"
+    }
+  ],
+  "savedAt": 1786713704887
+}

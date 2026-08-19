@@ -1,0 +1,14 @@
+{
+  "name": "testfieldrule",
+  "sourceSchema": "FMKB_down",
+  "targetSchema": "AP_submitted_CM",
+  "mappings": [
+    {
+      "source": "[].pk",
+      "sourceLabel": "ppk12",
+      "target": "[].title",
+      "targetLabel": "fffff"
+    }
+  ],
+  "savedAt": 1787143055034
+}
