@@ -26,7 +26,42 @@ const generatorQuestions = document.querySelector('#generator-questions');
 const generatorMessage = document.querySelector('#generator-message');
 const generatorRuleTemplate = document.querySelector('#generator-rule-template');
 const defaultGenerateSchema = document.querySelector('#default-generate-schema');
+const csvGeneratePattern = document.querySelector('#csv-generate-pattern');
+const csvGenerateRules = document.querySelector('#csv-generate-rules');
+const csvGeneratorQuestions = document.querySelector('#csv-generator-questions');
+const csvGeneratorMessage = document.querySelector('#csv-generator-message');
+const csvGeneratorRuleTemplate = generatorRuleTemplate;
+const csvForm = document.querySelector('#csv-form');
+const csvFileInput = document.querySelector('#csv-file');
+const csvDropzone = document.querySelector('#csv-dropzone');
+const csvNameInput = document.querySelector('#csv-name');
+const csvMessage = document.querySelector('#csv-message');
+const csvEditor = document.querySelector('#csv-editor');
+const csvColumns = document.querySelector('#csv-columns');
+const csvPreview = document.querySelector('#csv-preview');
+const csvUploadTitle = document.querySelector('#csv-upload-title');
+const csvUploadSubtitle = document.querySelector('#csv-upload-subtitle');
+const csvColumnCount = document.querySelector('#csv-column-count');
+const csvMeta = document.querySelector('#csv-meta');
+const csvRowCount = document.querySelector('#csv-row-count');
+const csvSavedGrid = document.querySelector('#csv-saved-grid');
+const csvEmpty = document.querySelector('#csv-empty');
+const csvSavedCount = document.querySelector('#csv-saved-count');
+const csvDownload = document.querySelector('#csv-download');
+const csvExtractVisible = document.querySelector('#csv-extract-visible');
+const csvExtractAll = document.querySelector('#csv-extract-all');
+const csvDraftName = document.querySelector('#csv-draft-name');
+const csvSaveDraft = document.querySelector('#csv-save-draft');
+const csvPreviewWrap = document.querySelector('.csv-preview-wrap');
+const csvScrollTop = document.querySelector('#csv-scroll-top');
+const csvScrollBottom = document.querySelector('#csv-scroll-bottom');
+const csvSelectAll = document.querySelector('#csv-select-all');
+const csvDeselectAll = document.querySelector('#csv-deselect-all');
+const csvCollapseFields = document.querySelector('#csv-collapse-fields');
+const csvFieldsPanel = document.querySelector('#csv-fields-panel');
 let selectedFile = null;
+let selectedCsvFile = null;
+let currentCsv = null;
 let editingRuleName = null;
 let activeRuleType = 'local';
 
@@ -46,6 +81,81 @@ const deletePattern = name => request(`/api/schemas/${encodeURIComponent(name)}`
 const rulePath = type => `/api/mapping-rules?type=${type}`;
 const getRules = async type => type ? request(rulePath(type)) : (await Promise.all(['local', 'mandatory'].map(scope => request(rulePath(scope))))).flat();
 const deleteRule = (name, type) => request(`/api/mapping-rules/${encodeURIComponent(name)}?type=${type}`, { method: 'DELETE' });
+const getCsvFiles = () => request('/api/csv-files');
+const deleteCsvFile = name => request(`/api/csv-files/${encodeURIComponent(name)}`, { method: 'DELETE' });
+
+function parseCsvFile(file) {
+  return new Promise((resolve, reject) => Papa.parse(file, {
+    header: true,
+    skipEmptyLines: 'greedy',
+    dynamicTyping: false,
+    complete: result => {
+      if (result.errors.length) { reject(new Error(`CSV could not be read: ${result.errors[0].message}`)); return; }
+      const fields = result.meta.fields || [];
+      if (!fields.length) { reject(new Error('The CSV needs a header row with at least one column.')); return; }
+      resolve({ fileName: file.name, delimiter: result.meta.delimiter || ',', fields, rows: result.data });
+    },
+    error: error => reject(error instanceof Error ? error : new Error('The CSV could not be read.'))
+  }));
+}
+function renderCsvEditor() {
+  if (!currentCsv) { csvEditor.hidden = true; return; }
+  const columns = currentCsv.columns;
+  const visibleColumns = columns.filter(column => column.visible !== false);
+  csvEditor.hidden = false;
+  csvColumnCount.textContent = `(${visibleColumns.length}/${columns.length} visible)`;
+  if (csvRowCount) csvRowCount.textContent = `${currentCsv.rows.length} ${currentCsv.rows.length === 1 ? 'row' : 'rows'}`;
+  const delimiterName = currentCsv.delimiter === '\t' ? 'TAB' : currentCsv.delimiter;
+  if (csvMeta) csvMeta.textContent = `${currentCsv.fileName} · delimiter ${delimiterName}`;
+  csvColumns.innerHTML = '';
+  columns.forEach((column, index) => {
+    const card = document.createElement('label'); card.className = 'csv-column';
+    card.innerHTML = `<span class="csv-column-number">${String(index + 1).padStart(2, '0')}</span><span class="csv-column-original">${column.name}</span><code class="csv-column-path">${column.name}</code><span class="csv-column-toggle"><input type="checkbox" ${column.visible !== false ? 'checked' : ''} aria-label="Show ${column.name}" /><span>Show column</span></span>`;
+    card.querySelector('input').onchange = event => { column.visible = event.target.checked; renderCsvEditor(); };
+    csvColumns.append(card);
+  });
+  renderCsvPreview();
+}
+function renderCsvPreview() {
+  if (!currentCsv) return;
+  const columns = currentCsv.columns.filter(column => column.visible !== false);
+  csvPreview.innerHTML = `<thead><tr>${columns.map(column => `<th>${column.name}</th>`).join('')}</tr></thead><tbody>${currentCsv.rows.map((row, rowIndex) => `<tr>${columns.map(column => `<td><input class="csv-cell-input" value="${String(row[column.name] ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')}" aria-label="${column.name}, row ${rowIndex + 1}" /></td>`).join('')}</tr>`).join('')}</tbody>`;
+  csvPreview.querySelectorAll('.csv-cell-input').forEach(input => {
+    const rowIndex = Number(input.getAttribute('aria-label').match(/row (\d+)$/)[1]) - 1;
+    const column = columns.find(item => item.name === input.getAttribute('aria-label').replace(/, row \d+$/, ''));
+    input.oninput = event => { currentCsv.rows[rowIndex][column.name] = event.target.value; };
+  });
+}
+function csvForDownload(includeHidden = false) {
+  const columns = includeHidden ? currentCsv.columns : currentCsv.columns.filter(column => column.visible !== false);
+  const fields = columns.map(column => column.name);
+  const data = currentCsv.rows.map(row => columns.map(column => row[column.name] ?? ''));
+  return Papa.unparse({ fields, data }, { delimiter: currentCsv.delimiter });
+}
+async function loadCsv(file) {
+  try {
+    currentCsv = await parseCsvFile(file);
+    selectedCsvFile = file;
+    currentCsv.columns = currentCsv.fields.map(name => ({ name, visible: true }));
+    csvUploadTitle.textContent = file.name;
+    csvUploadSubtitle.textContent = `${currentCsv.rows.length} ${currentCsv.rows.length === 1 ? 'row' : 'rows'} ready to review`;
+    csvMessage.textContent = '';
+    renderCsvEditor();
+  } catch (error) { csvMessage.textContent = error.message; }
+}
+function renderSavedCsvFiles(files) {
+  csvSavedGrid.innerHTML = '';
+  csvSavedCount.textContent = `(${files.length})`;
+  csvEmpty.hidden = files.length > 0;
+  files.forEach(file => {
+    const card = document.createElement('article'); card.className = 'csv-saved-card';
+    card.innerHTML = `<div class="schema-card-top"><span class="file-type">CSV</span><button class="delete-button" type="button" aria-label="Delete CSV">×</button></div><h3>${file.name}</h3><p class="schema-meta">${file.columns.length} columns · ${file.rows.length} rows</p><button class="view-button csv-open" type="button">Open fields <span>→</span></button>`;
+    card.querySelector('.csv-open').onclick = () => { currentCsv = { name: file.name, fileName: file.fileName, delimiter: file.delimiter, columns: file.columns.map(column => ({ name: column.name, visible: column.visible !== false })), rows: file.rows }; csvNameInput.value = file.name; renderCsvEditor(); document.querySelector('#csv-editor').scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+    card.querySelector('.delete-button').onclick = async () => { await deleteCsvFile(file.name); renderSavedCsvLibrary(); };
+    csvSavedGrid.append(card);
+  });
+}
+async function renderSavedCsvLibrary() { renderSavedCsvFiles(await getCsvFiles()); }
 
 function flattenFields(value, path = '') {
   if (value !== null && typeof value === 'object' && !Array.isArray(value)) return Object.entries(value).flatMap(([key, child]) => flattenFields(child, path ? `${path}.${key}` : key));
@@ -53,15 +163,21 @@ function flattenFields(value, path = '') {
   return [path || '(root)'];
 }
 async function schemaOptions() {
-  const schemas = await getPatterns();
+  const [schemas, csvFiles] = await Promise.all([getPatterns(), getCsvFiles()]);
+  const options = [...schemas.map(schema => ({ name: schema.name })), ...csvFiles.map(file => ({ name: `CSV - ${file.name}` }))];
   [sourceSchema, targetSchema].forEach(select => {
     const previous = select.value;
     select.innerHTML = '<option value="">Choose a schema…</option>';
-    schemas.forEach(schema => select.add(new Option(schema.name, schema.name)));
+    options.forEach(option => select.add(new Option(option.name, option.name)));
     select.value = previous;
   });
 }
 async function fieldsFor(schemaName) {
+  if (schemaName.startsWith('CSV - ')) {
+    const csvFiles = await getCsvFiles();
+    const csv = csvFiles.find(file => `CSV - ${file.name}` === schemaName);
+    return csv ? csv.columns.map(column => column.name) : [];
+  }
   const schemas = await getPatterns();
   const schema = schemas.find(item => item.name === schemaName);
   return schema ? flattenFields(JSON.parse(schema.json)) : [];
@@ -110,6 +226,7 @@ function renderFieldLibrary(rules, mandatoryRules = []) {
   const list = document.querySelector('#field-library-list');
   const empty = document.querySelector('#field-library-empty');
   const detail = document.querySelector('#field-library-detail');
+  const search = document.querySelector('#field-library-search');
   const transfer = document.querySelector('#field-transfer');
   const edit = document.querySelector('#field-edit');
   const remove = document.querySelector('#field-remove');
@@ -174,6 +291,20 @@ function renderFieldLibrary(rules, mandatoryRules = []) {
     };
     list.append(button);
   });
+  const filterFields = () => {
+    const query = search.value.trim().toLowerCase();
+    let matches = 0;
+    list.querySelectorAll('button').forEach(button => {
+      const match = button.textContent.toLowerCase().includes(query);
+      button.hidden = !match;
+      if (match) matches += 1;
+    });
+    empty.hidden = fields.length > 0 && matches > 0;
+    if (fields.length > 0 && matches === 0) empty.textContent = 'No friendly fields match your search.';
+    else empty.textContent = 'No friendly fields saved yet.';
+  };
+  search.oninput = filterFields;
+  filterFields();
 }
 async function editRule(rule) {
   editingRuleName = rule.name;
@@ -215,6 +346,66 @@ async function generatorSchemaOptions() {
   [...generateSchema.options].forEach(option => { option.selected = current.has(option.value); });
   [...defaultGenerateSchema.options].forEach(option => { option.selected = defaultCurrent.has(option.value); });
   renderEntityPicker(generateSchema); renderEntityPicker(defaultGenerateSchema);
+}
+async function csvGeneratorOptions() {
+  const csvFiles = await getCsvFiles();
+  const previous = csvGeneratePattern.value;
+  csvGeneratePattern.innerHTML = '<option value="">Choose a CSV pattern…</option>';
+  csvFiles.forEach(file => csvGeneratePattern.add(new Option(file.name, file.name)));
+  csvGeneratePattern.value = previous;
+  updateCsvGenerator();
+}
+async function updateCsvGenerator() {
+  const patternName = csvGeneratePattern.value;
+  const rulesSection = document.querySelector('#csv-generate-rules-section');
+  const questionsSection = document.querySelector('#csv-generator-questions-section');
+  const emptyState = document.querySelector('#csv-generator-empty');
+  csvGenerateRules.innerHTML = ''; csvGeneratorQuestions.innerHTML = ''; csvGeneratorMessage.textContent = '';
+  if (!patternName) { rulesSection.hidden = true; questionsSection.hidden = true; emptyState.hidden = false; return; }
+  const rules = (await getRules()).filter(rule => rule.targetSchema === `CSV - ${patternName}`);
+  emptyState.hidden = rules.length > 0; rulesSection.hidden = rules.length === 0; questionsSection.hidden = rules.length === 0;
+  if (!rules.length) { emptyState.textContent = 'No mapping rules target this CSV pattern.'; return; }
+  rules.forEach(rule => {
+    const node = csvGeneratorRuleTemplate.content.cloneNode(true);
+    const checkbox = node.querySelector('input'); checkbox.value = rule.name; checkbox.dataset.rule = JSON.stringify(rule); checkbox.onchange = refreshCsvGeneratorQuestions;
+    node.querySelector('.generator-rule-name').textContent = rule.name;
+    node.querySelector('small').textContent = `${rule.sourceSchema} → ${rule.targetSchema}`;
+    csvGenerateRules.append(node);
+  });
+}
+async function csvSourceValue(rule, field) {
+  if (rule.sourceSchema.startsWith('CSV - ')) {
+    const csv = (await getCsvFiles()).find(file => `CSV - ${file.name}` === rule.sourceSchema);
+    return csv?.rows[0]?.[field] ?? '';
+  }
+  const schema = (await getPatterns()).find(item => item.name === rule.sourceSchema);
+  return schema ? valueAtPath(JSON.parse(schema.json), field) ?? '' : '';
+}
+async function refreshCsvGeneratorQuestions() {
+  const fields = new Map();
+  [...csvGenerateRules.querySelectorAll('input:checked')].forEach(input => {
+    const rule = JSON.parse(input.dataset.rule);
+    rule.mappings.forEach(mapping => fields.set(`${rule.sourceSchema}:${mapping.source}`, { rule, mapping, field: mapping.source, friendlyName: mapping.sourceLabel }));
+  });
+  csvGeneratorQuestions.innerHTML = '';
+  for (const { rule, mapping, field, friendlyName } of fields.values()) {
+    const input = inputForField(field, await csvSourceValue(rule, field), rule.sourceSchema, friendlyName);
+    input.querySelector('input').dataset.targetField = mapping.target;
+    csvGeneratorQuestions.append(input);
+  }
+}
+async function generateCsvFile() {
+  try {
+    const csv = (await getCsvFiles()).find(file => file.name === csvGeneratePattern.value);
+    if (!csv) throw new Error('Choose a CSV pattern.');
+    const row = { ...(csv.rows[0] || {}) };
+    [...csvGeneratorQuestions.querySelectorAll('input')].forEach(input => { if (input.value.trim()) input.dataset.targetField && (row[input.dataset.targetField] = input.value.trim()); });
+    const columns = csv.columns.filter(column => column.visible !== false);
+    const output = Papa.unparse({ fields: columns.map(column => column.name), data: [columns.map(column => row[column.name] ?? '')] }, { delimiter: csv.delimiter });
+    const result = await request('/api/generated-csv-files', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entity: csv.name, csv: output }) });
+    const link = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob([output], { type: 'text/csv;charset=utf-8' })), download: result.filename });
+    link.click(); URL.revokeObjectURL(link.href); csvGeneratorMessage.textContent = `Generated and saved ${result.filename}.`;
+  } catch (error) { csvGeneratorMessage.textContent = error.message; }
 }
 const selectedEntities = select => [...select.selectedOptions].map(option => option.value).filter(Boolean);
 function entityPickerFor(select) {
@@ -404,6 +595,10 @@ fileInput.onchange = e => setFile(e.target.files[0]);
 ['dragenter','dragover'].forEach(event => dropzone.addEventListener(event, e => { e.preventDefault(); dropzone.classList.add('dragging'); }));
 ['dragleave','drop'].forEach(event => dropzone.addEventListener(event, e => { e.preventDefault(); dropzone.classList.remove('dragging'); }));
 dropzone.addEventListener('drop', e => setFile(e.dataTransfer.files[0]));
+csvFileInput.onchange = e => loadCsv(e.target.files[0]);
+['dragenter','dragover'].forEach(event => csvDropzone.addEventListener(event, e => { e.preventDefault(); csvDropzone.classList.add('dragging'); }));
+['dragleave','drop'].forEach(event => csvDropzone.addEventListener(event, e => { e.preventDefault(); csvDropzone.classList.remove('dragging'); }));
+csvDropzone.addEventListener('drop', e => loadCsv(e.dataTransfer.files[0]));
 form.onsubmit = async e => {
   e.preventDefault();
   const name = nameInput.value.trim();
@@ -416,6 +611,52 @@ form.onsubmit = async e => {
   } catch (error) { message.textContent = error instanceof SyntaxError ? 'That file is not valid JSON. Please check it and try again.' : error.message; }
 };
 clearButton.onclick = async () => { if (confirm('Remove all saved patterns from the Schema Vault folder?')) { const patterns = await getPatterns(); await Promise.all(patterns.map(pattern => deletePattern(pattern.name))); render(); } };
+csvForm.onsubmit = async event => {
+  event.preventDefault();
+  if (!currentCsv) { csvMessage.textContent = 'Import a CSV file first.'; return; }
+  try {
+    const name = csvNameInput.value.trim();
+    const saved = await saveCsvPattern(name);
+    csvMessage.textContent = `Saved ${saved.name} to the CSV library.`;
+    await renderSavedCsvLibrary();
+  } catch (error) { csvMessage.textContent = error.message; }
+};
+async function saveCsvPattern(name) {
+  const existingName = currentCsv.name;
+  const method = existingName ? 'PUT' : 'POST';
+  const path = existingName ? `/api/csv-files/${encodeURIComponent(existingName)}` : '/api/csv-files';
+  const saved = await request(path, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, fileName: currentCsv.fileName, delimiter: currentCsv.delimiter, columns: currentCsv.columns, rows: currentCsv.rows }) });
+  currentCsv.name = saved.name;
+  return saved;
+}
+csvSelectAll.onclick = () => { if (!currentCsv) return; currentCsv.columns.forEach(column => { column.visible = true; }); renderCsvEditor(); };
+csvDeselectAll.onclick = () => { if (!currentCsv) return; currentCsv.columns.forEach(column => { column.visible = false; }); renderCsvEditor(); };
+csvCollapseFields.onclick = () => {
+  const collapsed = csvFieldsPanel.classList.toggle('collapsed');
+  csvCollapseFields.innerHTML = collapsed ? 'Show fields <span>⌄</span>' : 'Hide fields <span>⌃</span>';
+  csvCollapseFields.setAttribute('aria-expanded', String(!collapsed));
+};
+function downloadCsv(includeHidden) {
+  if (!currentCsv) return;
+  const csv = csvForDownload(includeHidden);
+  const downloadName = `${csvNameInput.value.trim() || currentCsv.fileName.replace(/\.csv$/i, '')}-edited.csv`;
+  const link = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })), download: downloadName });
+  link.click(); URL.revokeObjectURL(link.href);
+}
+csvExtractVisible.onclick = () => downloadCsv(false);
+csvExtractAll.onclick = () => downloadCsv(true);
+csvSaveDraft.onclick = async () => {
+  const draftName = csvDraftName.value.trim();
+  if (!draftName) { csvMessage.textContent = 'Enter a new draft pattern name.'; return; }
+  try {
+    const saved = await request('/api/csv-files', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: draftName, fileName: currentCsv.fileName, delimiter: currentCsv.delimiter, columns: currentCsv.columns, rows: currentCsv.rows }) });
+    csvMessage.textContent = `Saved ${saved.name} as a new draft pattern.`;
+    csvDraftName.value = '';
+    await renderSavedCsvLibrary();
+  } catch (error) { csvMessage.textContent = error.message; }
+};
+csvScrollTop.onclick = () => csvPreviewWrap.scrollTo({ top: 0, behavior: 'auto' });
+csvScrollBottom.onclick = () => csvPreviewWrap.scrollTo({ top: csvPreviewWrap.scrollHeight, behavior: 'auto' });
 sourceSchema.onchange = updateMappingBuilder; targetSchema.onchange = updateMappingBuilder;
 document.querySelector('#add-mapping').onclick = addMappingRow;
 document.querySelectorAll('.rule-type-tab').forEach(tab => tab.onclick = async () => {
@@ -434,23 +675,30 @@ document.querySelector('#save-rule').onclick = async () => {
 generateSchema.onchange = updateGenerator;
 document.querySelector('#generate-file').onclick = generateFile;
 document.querySelector('#generate-default-file').onclick = generateDefaultFile;
+csvGeneratePattern.onchange = updateCsvGenerator;
+document.querySelector('#generate-csv-file').onclick = generateCsvFile;
 document.querySelectorAll('.generator-tab').forEach(tab => tab.onclick = () => {
   const isDefault = tab.dataset.generatorView === 'default';
+  const isCsv = tab.dataset.generatorView === 'csv';
   document.querySelectorAll('.generator-tab').forEach(item => item.classList.toggle('active', item === tab));
   document.querySelector('#default-creation').hidden = !isDefault;
-  document.querySelector('#custom-creation').hidden = isDefault;
+  document.querySelector('#custom-creation').hidden = isDefault || isCsv;
+  document.querySelector('#csv-creation').hidden = !isCsv;
+  if (isCsv) csvGeneratorOptions();
 });
 document.querySelectorAll('.tab').forEach(tab => tab.onclick = async () => {
   document.querySelectorAll('.tab').forEach(item => item.classList.toggle('active', item === tab));
   document.querySelector('#schemas-page').hidden = tab.dataset.view !== 'schemas';
+  document.querySelector('#csv-page').hidden = tab.dataset.view !== 'csv';
   document.querySelector('#mappings-page').hidden = tab.dataset.view !== 'mappings';
   document.querySelector('#generate-page').hidden = tab.dataset.view !== 'generate';
+  if (tab.dataset.view === 'csv') await renderSavedCsvLibrary();
   if (tab.dataset.view === 'mappings') { updateRuleTypeLabels(); await schemaOptions(); await renderRules(); }
-  if (tab.dataset.view === 'generate') { await generatorSchemaOptions(); await updateGenerator(); }
+  if (tab.dataset.view === 'generate') { await generatorSchemaOptions(); await csvGeneratorOptions(); await updateGenerator(); }
 });
 document.querySelector('#close-dialog').onclick = () => dialog.close();
 if (location.protocol === 'file:') {
   serverNotice.hidden = false;
   serverNotice.textContent = 'This page was opened directly from a file. To save schemas, run “npm start” in this project folder and open http://127.0.0.1:4173.';
 }
-Promise.all([render(), schemaOptions(), renderRules(), generatorSchemaOptions()]).catch(error => { message.textContent = error.message; });
+Promise.all([render(), renderSavedCsvLibrary(), schemaOptions(), renderRules(), generatorSchemaOptions(), csvGeneratorOptions()]).catch(error => { message.textContent = error.message; });

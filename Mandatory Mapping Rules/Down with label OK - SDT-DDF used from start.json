@@ -1,0 +1,14 @@
+{
+  "name": "Down with label OK - SDT-DDF used from start",
+  "sourceSchema": "AP_submitted_CM",
+  "targetSchema": "FMKB_down",
+  "mappings": [
+    {
+      "source": "[].startDate",
+      "sourceLabel": "",
+      "target": "[].startDateTime",
+      "targetLabel": "Down Start"
+    }
+  ],
+  "savedAt": 1787920644370
+}

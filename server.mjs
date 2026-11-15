@@ -9,6 +9,7 @@ const vault = join(root, 'Schema Vault');
 const localRulesVault = join(root, 'Local Rules');
 const mandatoryRulesVault = join(root, 'Mandatory Mapping Rules');
 const generatedVault = join(root, 'Generated Files');
+const csvVault = join(root, 'CSV Vault');
 const host = '127.0.0.1';
 const port = 4173;
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8' };
@@ -39,15 +40,48 @@ async function listRules(type) {
   const rules = await Promise.all(entries.filter(entry => entry.isFile() && extname(entry.name) === '.json').map(async entry => JSON.parse(await readFile(join(rulesVault, entry.name), 'utf8'))));
   return rules.sort((a, b) => b.savedAt - a.savedAt);
 }
+async function listCsvFiles() {
+  const entries = await readdir(csvVault, { withFileTypes: true });
+  const files = await Promise.all(entries.filter(entry => entry.isFile() && extname(entry.name) === '.json').map(async entry => JSON.parse(await readFile(join(csvVault, entry.name), 'utf8'))));
+  return files.sort((a, b) => b.savedAt - a.savedAt);
+}
 
 await mkdir(vault, { recursive: true });
 await mkdir(localRulesVault, { recursive: true });
 await mkdir(mandatoryRulesVault, { recursive: true });
 await mkdir(generatedVault, { recursive: true });
+await mkdir(csvVault, { recursive: true });
 createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${host}:${port}`);
     if (url.pathname === '/api/schemas' && req.method === 'GET') return send(res, 200, await listSchemas());
+    if (url.pathname === '/api/csv-files' && req.method === 'GET') return send(res, 200, await listCsvFiles());
+    if (url.pathname === '/api/csv-files' && req.method === 'POST') {
+      let body = '';
+      for await (const chunk of req) { body += chunk; if (body.length > 20 * 1024 * 1024) return send(res, 413, { error: 'CSV file is too large.' }); }
+      const file = JSON.parse(body);
+      const validName = safeName(file.name);
+      if (!validName || !Array.isArray(file.columns) || !Array.isArray(file.rows) || !file.columns.length) return send(res, 400, { error: 'Provide a CSV name, columns, and rows.' });
+      if (file.columns.some(column => !column || typeof column.name !== 'string') || file.rows.some(row => row === null || typeof row !== 'object' || Array.isArray(row))) return send(res, 400, { error: 'Invalid CSV structure.' });
+      const target = join(csvVault, `${validName}.json`);
+      try { await stat(target); return send(res, 409, { error: 'A CSV with this name already exists.' }); } catch { /* File does not exist. */ }
+      const savedFile = { name: validName, fileName: typeof file.fileName === 'string' ? file.fileName : `${validName}.csv`, delimiter: typeof file.delimiter === 'string' ? file.delimiter : ',', columns: file.columns.map(column => ({ name: column.name, visible: column.visible !== false })), rows: file.rows, savedAt: Date.now() };
+      await writeFile(target, JSON.stringify(savedFile, null, 2), 'utf8');
+      return send(res, 201, savedFile);
+    }
+    const csvUpdateMatch = url.pathname.match(/^\/api\/csv-files\/([^/]+)$/);
+    if (csvUpdateMatch && req.method === 'PUT') {
+      const type = ruleTypeFor(url);
+      const name = safeName(decodeURIComponent(csvUpdateMatch[1]));
+      if (!name) return send(res, 400, { error: 'Invalid CSV name.' });
+      let body = '';
+      for await (const chunk of req) { body += chunk; if (body.length > 20 * 1024 * 1024) return send(res, 413, { error: 'CSV file is too large.' }); }
+      const file = JSON.parse(body);
+      if (!Array.isArray(file.columns) || !Array.isArray(file.rows) || !file.columns.length || file.columns.some(column => !column || typeof column.name !== 'string')) return send(res, 400, { error: 'Invalid CSV structure.' });
+      const savedFile = { name, fileName: typeof file.fileName === 'string' ? file.fileName : `${name}.csv`, delimiter: typeof file.delimiter === 'string' ? file.delimiter : ',', columns: file.columns.map(column => ({ name: column.name, visible: column.visible !== false })), rows: file.rows, savedAt: Date.now() };
+      await writeFile(join(csvVault, `${name}.json`), JSON.stringify(savedFile, null, 2), 'utf8');
+      return send(res, 200, savedFile);
+    }
     if (url.pathname === '/api/schemas' && req.method === 'POST') {
       let body = '';
       for await (const chunk of req) { body += chunk; if (body.length > 10 * 1024 * 1024) return send(res, 413, { error: 'File is too large.' }); }
@@ -91,11 +125,29 @@ createServer(async (req, res) => {
       await writeFile(join(generatedVault, filename), json, 'utf8');
       return send(res, 201, { filename });
     }
+    if (url.pathname === '/api/generated-csv-files' && req.method === 'POST') {
+      let body = '';
+      for await (const chunk of req) { body += chunk; if (body.length > 20 * 1024 * 1024) return send(res, 413, { error: 'Generated CSV is too large.' }); }
+      const { entity, csv } = JSON.parse(body);
+      const validEntity = safeName(entity);
+      if (!validEntity || typeof csv !== 'string') return send(res, 400, { error: 'Invalid generated CSV.' });
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const filename = `${validEntity} - ${stamp}.csv`;
+      await writeFile(join(generatedVault, filename), csv, 'utf8');
+      return send(res, 201, { filename });
+    }
     const deleteMatch = url.pathname.match(/^\/api\/schemas\/([^/]+)$/);
     if (deleteMatch && req.method === 'DELETE') {
       const name = safeName(decodeURIComponent(deleteMatch[1]));
       if (!name) return send(res, 400, { error: 'Invalid pattern name.' });
       await unlink(fileFor(name));
+      return send(res, 204, '');
+    }
+    const deleteCsvMatch = url.pathname.match(/^\/api\/csv-files\/([^/]+)$/);
+    if (deleteCsvMatch && req.method === 'DELETE') {
+      const name = safeName(decodeURIComponent(deleteCsvMatch[1]));
+      if (!name) return send(res, 400, { error: 'Invalid CSV name.' });
+      await unlink(join(csvVault, `${name}.json`));
       return send(res, 204, '');
     }
     const deleteRuleMatch = url.pathname.match(/^\/api\/mapping-rules\/([^/]+)$/);
@@ -124,7 +176,7 @@ createServer(async (req, res) => {
     }
     const relative = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);
     const path = resolve(root, relative);
-    if (!path.startsWith(root) || ['Schema Vault', 'Local Rules', 'Mandatory Mapping Rules', 'Generated Files'].some(folder => relative.includes(folder))) return send(res, 403, 'Forbidden', 'text/plain');
+    if (!path.startsWith(root) || ['Schema Vault', 'Local Rules', 'Mandatory Mapping Rules', 'Generated Files', 'CSV Vault'].some(folder => relative.includes(folder))) return send(res, 403, 'Forbidden', 'text/plain');
     try {
       const info = await stat(path);
       if (!info.isFile()) return send(res, 404, 'Not found', 'text/plain');
